@@ -1,0 +1,25 @@
+{
+  "results": {
+    "Linear Regression": {
+      "R2": 0.1276,
+      "MAE": 9.0948,
+      "RMSE": 12.2713
+    },
+    "Random Forest": {
+      "R2": 0.2777,
+      "MAE": 7.3618,
+      "RMSE": 11.166
+    },
+    "Gradient Boosting": {
+      "R2": 0.1964,
+      "MAE": 7.5134,
+      "RMSE": 11.777
+    },
+    "XGBoost": {
+      "R2": 0.2586,
+      "MAE": 7.4542,
+      "RMSE": 11.3123
+    }
+  },
+  "best_model": "Random Forest"
+}
