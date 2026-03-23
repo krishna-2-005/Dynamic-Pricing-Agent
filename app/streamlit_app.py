@@ -1,4 +1,5 @@
 import sys, os
+from pathlib import Path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import streamlit as st
@@ -176,13 +177,14 @@ label { color: rgba(255,255,255,0.7) !important; font-size: 0.82rem !important; 
 # ── Load artifacts ────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_artifacts():
-    model        = joblib.load('models/demand_model.pkl')
-    feature_cols = joblib.load('models/feature_cols.pkl')
-    product_map  = joblib.load('models/product_map.pkl')
-    category_map = joblib.load('models/category_map.pkl')
-    with open('models/model_results.json') as f:
+    base = Path(__file__).resolve().parent.parent
+    model        = joblib.load(base / 'models/demand_model.pkl')
+    feature_cols = joblib.load(base / 'models/feature_cols.pkl')
+    product_map  = joblib.load(base / 'models/product_map.pkl')
+    category_map = joblib.load(base / 'models/category_map.pkl')
+    with open(base / 'models/model_results.json') as f:
         results = json.load(f)
-    df = pd.read_csv('data/processed_data.csv')
+    df = pd.read_csv(base / 'data/processed_data.csv')
     return model, feature_cols, product_map, category_map, results, df
 
 model, feature_cols, product_map, category_map, model_results, df = load_artifacts()
@@ -254,6 +256,29 @@ tab1, tab2, tab3 = st.tabs(["💰  Price Optimizer", "📊  Data Insights", "�
 # TAB 1 — Price Optimizer
 # ════════════════════════════════════════════════════════════════════════════
 with tab1:
+
+    # ── Beginner Mode toggle ──────────────────────────────────────────────────
+    beginner_mode = st.toggle("🎓 Beginner Mode — explain inputs", value=False)
+
+    # ── Auto-suggest: pre-fill with dataset medians ───────────────────────────
+    def _tip(text):
+        if beginner_mode:
+            st.caption(f"💡 {text}")
+
+    if st.button("✨  Give me best price  (auto-fill with typical values)", use_container_width=False):
+        st.session_state['unit_price']                 = float(df['unit_price'].median())
+        st.session_state['product_score']              = float(df['product_score'].median())
+        st.session_state['product_photos_qty']         = int(df['product_photos_qty'].median())
+        st.session_state['product_name_lenght']        = int(df['product_name_lenght'].median())
+        st.session_state['product_description_lenght'] = int(df['product_description_lenght'].median())
+        st.session_state['product_weight_g']           = int(df['product_weight_g'].median())
+        st.session_state['volume']                     = float(df['volume'].median())
+        st.session_state['customers']                  = int(df['customers'].median())
+        st.session_state['avg_comp_price']             = float(df['avg_comp_price'].median())
+        st.session_state['min_comp_price']             = float(df['min_comp_price'].median())
+        st.session_state['avg_comp_score']             = float(df['avg_comp_score'].median())
+        st.info("✅ Inputs filled with typical dataset values — hit **Find Optimal Price** to see the result.")
+
     c1, c2, c3 = st.columns(3, gap="medium")
 
     with c1:
@@ -262,32 +287,69 @@ with tab1:
         category_names   = [""] + sorted(category_map.keys())
         selected_product  = st.selectbox("Product", product_names)
         selected_category = st.selectbox("Category", category_names)
+        _tip("Category = the type of product, e.g. electronics, clothing")
         product_id_enc       = product_map.get(selected_product, 0)
         product_category_enc = category_map.get(selected_category, 0)
-        unit_price        = st.number_input("Current Unit Price ($)", min_value=0.0, value=None, step=1.0, placeholder="e.g. 50.00")
-        product_score     = st.number_input("Product Rating (1–5)", min_value=0.0, max_value=5.0, value=None, step=0.1, placeholder="e.g. 4.2")
-        product_photos_qty = st.number_input("Number of Photos", min_value=0, value=None, step=1, placeholder="e.g. 3")
+        unit_price        = st.number_input("Current Unit Price ($)", min_value=0.0,
+                                            value=st.session_state.get('unit_price', None),
+                                            step=1.0, placeholder="e.g. 50.00")
+        _tip("Unit Price = how much you are currently charging for this product")
+        product_score     = st.number_input("Product Rating (1–5)", min_value=0.0, max_value=5.0,
+                                            value=st.session_state.get('product_score', None),
+                                            step=0.1, placeholder="e.g. 4.2")
+        _tip("Rating = how good customers think the product is (1 = bad, 5 = excellent)")
+        product_photos_qty = st.number_input("Number of Photos", min_value=0,
+                                             value=st.session_state.get('product_photos_qty', None),
+                                             step=1, placeholder="e.g. 3")
+        _tip("Photos = more photos usually means more trust and more sales")
 
     with c2:
         st.markdown('<div class="section-title">📦 Physical Attributes</div>', unsafe_allow_html=True)
-        product_name_lenght        = st.number_input("Product Name Length",  min_value=0, value=None, step=1,    placeholder="e.g. 40")
-        product_description_lenght = st.number_input("Description Length",   min_value=0, value=None, step=10,   placeholder="e.g. 200")
-        product_weight_g           = st.number_input("Weight (g)",           min_value=0, value=None, step=50,   placeholder="e.g. 500")
-        volume                     = st.number_input("Volume (cm³)",         min_value=0.0, value=None, step=100.0, placeholder="e.g. 5000")
-        customers                  = st.number_input("Monthly Customers",    min_value=0, value=None, step=5,    placeholder="e.g. 50")
+        product_name_lenght        = st.number_input("Product Name Length",  min_value=0,
+                                                     value=st.session_state.get('product_name_lenght', None),
+                                                     step=1,    placeholder="e.g. 40")
+        _tip("Name Length = number of characters in the product title")
+        product_description_lenght = st.number_input("Description Length",   min_value=0,
+                                                     value=st.session_state.get('product_description_lenght', None),
+                                                     step=10,   placeholder="e.g. 200")
+        _tip("Description Length = number of characters in the product description")
+        product_weight_g           = st.number_input("Weight (g)",           min_value=0,
+                                                     value=st.session_state.get('product_weight_g', None),
+                                                     step=50,   placeholder="e.g. 500")
+        _tip("Weight = how heavy the product is in grams (affects shipping cost)")
+        volume                     = st.number_input("Volume (cm³)",         min_value=0.0,
+                                                     value=st.session_state.get('volume', None),
+                                                     step=100.0, placeholder="e.g. 5000")
+        _tip("Volume = size of the product (length × width × height in cm³)")
+        customers                  = st.number_input("Monthly Customers",    min_value=0,
+                                                     value=st.session_state.get('customers', None),
+                                                     step=5,    placeholder="e.g. 50")
+        _tip("Monthly Customers = how many people buy this product per month on average")
 
     with c3:
         st.markdown('<div class="section-title">🌐 Market & Time</div>', unsafe_allow_html=True)
-        avg_comp_price = st.number_input("Avg Competitor Price ($)", min_value=0.0, value=None, step=1.0, placeholder="e.g. 45.00")
-        min_comp_price = st.number_input("Min Competitor Price ($)", min_value=0.0, value=None, step=1.0, placeholder="e.g. 40.00")
-        avg_comp_score = st.number_input("Avg Competitor Score (1–5)", min_value=0.0, max_value=5.0, value=None, step=0.1, placeholder="e.g. 3.8")
+        avg_comp_price = st.number_input("Avg Competitor Price ($)", min_value=0.0,
+                                         value=st.session_state.get('avg_comp_price', None),
+                                         step=1.0, placeholder="e.g. 45.00")
+        _tip("Avg Competitor Price = the average price other sellers charge for the same product")
+        min_comp_price = st.number_input("Min Competitor Price ($)", min_value=0.0,
+                                         value=st.session_state.get('min_comp_price', None),
+                                         step=1.0, placeholder="e.g. 40.00")
+        _tip("Min Competitor Price = the cheapest price a competitor is offering")
+        avg_comp_score = st.number_input("Avg Competitor Score (1–5)", min_value=0.0, max_value=5.0,
+                                         value=st.session_state.get('avg_comp_score', None),
+                                         step=0.1, placeholder="e.g. 3.8")
+        _tip("Competitor Score = average rating of competitor products (lower = your product may stand out)")
         month   = st.selectbox("Month", [""] + list(range(1,13)),
                                format_func=lambda x: x if x=="" else ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x-1])
+        _tip("Month = the month you want to price for (demand changes with seasons)")
         year    = st.selectbox("Year", ["", 2017, 2018, 2024, 2025])
         weekday = st.selectbox("Weekday", [""] + list(range(7)),
                                format_func=lambda x: x if x=="" else ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][x])
+        _tip("Weekday = day of the week (weekends often have different buying patterns)")
         weekend = 1 if (weekday != "" and weekday >= 5) else 0
         holiday = st.selectbox("Holiday?", ["", 0, 1], format_func=lambda x: "" if x=="" else ("Yes" if x else "No"))
+        _tip("Holiday = is this a public holiday? Demand can spike on holidays")
 
     # Track raw values for validation (before coercion)
     _raw = {
@@ -381,12 +443,16 @@ with tab1:
                 opt_demand = predict_demand(opt_fv)
                 rev_change_pct = ((max_revenue - curr_revenue) / max(curr_revenue, 0.01)) * 100
                 price_change   = opt_price - unit_price
+                curr_profit    = curr_revenue * 0.4
+                new_profit     = max_revenue  * 0.4
+                profit_chg_pct = ((new_profit - curr_profit) / max(curr_profit, 0.01)) * 100
 
             # Result cards
-            delta_cls = "pos" if rev_change_pct >= 0 else "neg"
-            price_cls = "pos" if price_change >= 0 else "neg"
+            delta_cls  = "pos" if rev_change_pct  >= 0 else "neg"
+            price_cls  = "pos" if price_change     >= 0 else "neg"
+            profit_cls = "pos" if profit_chg_pct   >= 0 else "neg"
             st.markdown(f"""
-            <div class="result-grid">
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1.5rem 0;">
               <div class="result-card green">
                 <div class="result-label">Optimal Price</div>
                 <div class="result-value">${opt_price:.2f}</div>
@@ -407,8 +473,20 @@ with tab1:
                 <div class="result-value">${curr_revenue:.2f}</div>
                 <div class="result-delta">@ ${unit_price:.2f}</div>
               </div>
+              <div class="result-card amber">
+                <div class="result-label">📈 Current Profit Est.</div>
+                <div class="result-value">${curr_profit:.2f}</div>
+                <div class="result-delta">~40% margin assumed</div>
+              </div>
+              <div class="result-card green">
+                <div class="result-label">📈 New Profit Est.</div>
+                <div class="result-value">${new_profit:.2f}</div>
+                <div class="result-delta {profit_cls}">{profit_chg_pct:+.1f}% vs current</div>
+              </div>
             </div>
             """, unsafe_allow_html=True)
+            if beginner_mode:
+                st.info("💡 Profit is estimated using a 40% margin. Real profit = (Price − Cost) × Demand")
 
             if opt_price > unit_price:
                 st.markdown(f'<div class="insight-banner up">📈 Raise price to <strong>${opt_price:.2f}</strong> — projected revenue increase of <strong>{rev_change_pct:.1f}%</strong></div>', unsafe_allow_html=True)
@@ -435,6 +513,8 @@ with tab1:
                               annotation_text=f"Current ${unit_price:.2f}", annotation_font_color='#f6ad55')
                 fig.update_layout(**CHART_LAYOUT, title=dict(text="Revenue vs Price", font=dict(size=15, color='white')), height=360)
                 st.plotly_chart(fig, use_container_width=True)
+                if beginner_mode:
+                    st.caption("💡 This chart shows how much money you'd make at each price. The green line is the best price, orange is your current price.")
 
             with ch2:
                 fig2 = go.Figure()
@@ -445,14 +525,19 @@ with tab1:
                 ))
                 fig2.add_vline(x=opt_price, line_dash='dash', line_color='#34d399', line_width=2,
                                annotation_text=f"Optimal ${opt_price:.2f}", annotation_font_color='#34d399')
+                fig2.add_vline(x=unit_price, line_dash='dot', line_color='#f6ad55', line_width=1.5,
+                               annotation_text=f"Current ${unit_price:.2f}", annotation_font_color='#f6ad55')
                 fig2.update_layout(**CHART_LAYOUT, title=dict(text="Demand vs Price", font=dict(size=15, color='white')), height=360)
+                st.plotly_chart(fig2, use_container_width=True)
+                if beginner_mode:
+                    st.caption("💡 This chart shows how many units you'd sell at each price. Higher price = fewer buyers.")
                 st.plotly_chart(fig2, use_container_width=True)
 
 # ════════════════════════════════════════════════════════════════════════════
 # TAB 2 — Data Insights
 # ════════════════════════════════════════════════════════════════════════════
 with tab2:
-    raw = pd.read_csv('data/retail_price_dataset.csv')
+    raw = pd.read_csv(Path(__file__).resolve().parent.parent / 'data/retail_price_dataset.csv')
 
     # Stat cards
     s1, s2, s3, s4 = st.columns(4, gap="medium")
